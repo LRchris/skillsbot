@@ -416,33 +416,65 @@ async function extractSkillsWithClaude(company, jobs) {
 }
 
 async function requestClaudeSkills(company, jobs, model) {
-  const payload = {
-    model,
-    max_tokens: 1800,
-    temperature: 0.2,
-    system:
-      "You analyze job descriptions and return JSON only. Extract concise professional skills, tools, and technologies. No commentary outside JSON.",
-    messages: [
-      {
-        role: "user",
-        content: JSON.stringify({
-          task: "For each role, extract 5 to 10 skills from the description, then produce a company-wide top skills list with counts.",
-          company,
-          jobs: jobs.slice(0, 12).map((job) => ({
-            id: job.id,
-            title: job.title,
-            location: job.location,
-            description: job.description.slice(0, 5000)
-          })),
-          outputShape: {
-            roles: [{ id: "job-id", skills: ["TypeScript", "React"] }],
-            companySkills: [{ skill: "TypeScript", count: 4 }]
-          }
-        })
-      }
-    ]
-  };
+  const text = await sendAnthropicMessage(
+    {
+      model,
+      max_tokens: 1800,
+      temperature: 0.2,
+      system:
+        "You analyze job descriptions and return JSON only. Extract concise professional skills, tools, and technologies. No commentary outside JSON.",
+      messages: [
+        {
+          role: "user",
+          content: JSON.stringify({
+            task: "For each role, extract 5 to 10 skills from the description, then produce a company-wide top skills list with counts.",
+            company,
+            jobs: jobs.slice(0, 12).map((job) => ({
+              id: job.id,
+              title: job.title,
+              location: job.location,
+              description: job.description.slice(0, 5000)
+            })),
+            outputShape: {
+              roles: [{ id: "job-id", skills: ["TypeScript", "React"] }],
+              companySkills: [{ skill: "TypeScript", count: 4 }]
+            }
+          })
+        }
+      ]
+    },
+    model
+  );
 
+  const parsed = parseJsonFromText(text);
+  const normalized = isExpectedClaudeShape(parsed)
+    ? parsed
+    : await repairClaudeJsonResponse(model, text, jobs);
+
+  if (!isExpectedClaudeShape(normalized)) {
+    throw new Error("Anthropic response did not include expected JSON.");
+  }
+
+  const roleMap = Object.fromEntries(
+    normalized.roles
+      .filter((role) => role?.id && Array.isArray(role.skills))
+      .map((role) => [role.id, uniqueSkills(role.skills)])
+  );
+
+  return {
+    roles: roleMap,
+    companySkills: normalized.companySkills
+      .filter((item) => item?.skill)
+      .map((item) => ({
+        skill: item.skill,
+        count: Number(item.count) || 1
+      }))
+      .slice(0, 20),
+    notes: [`Claude extraction enabled with ${model}.`]
+  };
+}
+
+async function sendAnthropicMessage(payload, model) {
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -459,30 +491,36 @@ async function requestClaudeSkills(company, jobs, model) {
   }
 
   const data = await response.json();
-  const text = data?.content?.map((item) => item.text || "").join("\n") || "";
-  const parsed = parseJsonFromText(text);
+  return data?.content?.map((item) => item.text || "").join("\n") || "";
+}
 
-  if (!parsed?.roles || !parsed?.companySkills) {
-    throw new Error("Anthropic response did not include expected JSON.");
-  }
-
-  const roleMap = Object.fromEntries(
-    parsed.roles
-      .filter((role) => role?.id && Array.isArray(role.skills))
-      .map((role) => [role.id, uniqueSkills(role.skills)])
+async function repairClaudeJsonResponse(model, rawText, jobs) {
+  const repairedText = await sendAnthropicMessage(
+    {
+      model,
+      max_tokens: 1600,
+      temperature: 0,
+      system:
+        "You convert model output into valid JSON only. Return no commentary, no markdown, and no code fences.",
+      messages: [
+        {
+          role: "user",
+          content: JSON.stringify({
+            task: "Convert the following assistant output into valid JSON with the exact required shape. If information is missing, infer conservatively from the content.",
+            requiredShape: {
+              roles: [{ id: "job-id", skills: ["TypeScript", "React"] }],
+              companySkills: [{ skill: "TypeScript", count: 4 }]
+            },
+            validJobIds: jobs.map((job) => job.id),
+            assistantOutput: rawText
+          })
+        }
+      ]
+    },
+    model
   );
 
-  return {
-    roles: roleMap,
-    companySkills: parsed.companySkills
-      .filter((item) => item?.skill)
-      .map((item) => ({
-        skill: item.skill,
-        count: Number(item.count) || 1
-      }))
-      .slice(0, 20),
-    notes: [`Claude extraction enabled with ${model}.`]
-  };
+  return parseJsonFromText(repairedText);
 }
 
 async function buildAnthropicModelCandidates() {
@@ -695,6 +733,14 @@ function getAnthropicModelScore(modelId) {
     return 100;
   }
   return 0;
+}
+
+function isExpectedClaudeShape(value) {
+  return Boolean(
+    value &&
+      Array.isArray(value.roles) &&
+      Array.isArray(value.companySkills)
+  );
 }
 
 async function readJsonBody(req) {
