@@ -581,14 +581,37 @@ function escapeRegex(value) {
 }
 
 function parseJsonFromText(text) {
-  const firstBrace = text.indexOf("{");
-  const lastBrace = text.lastIndexOf("}");
-  if (firstBrace === -1 || lastBrace === -1) {
-    return null;
+  const candidates = [];
+  const fencedMatches = [...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)];
+
+  for (const match of fencedMatches) {
+    if (match[1]) {
+      candidates.push(match[1].trim());
+    }
   }
 
-  const json = text.slice(firstBrace, lastBrace + 1);
-  return JSON.parse(json);
+  const firstBrace = text.indexOf("{");
+  const lastBrace = text.lastIndexOf("}");
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    candidates.push(text.slice(firstBrace, lastBrace + 1));
+  }
+
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(cleanJsonCandidate(candidate));
+    } catch {
+      // Try the next candidate.
+    }
+  }
+
+  return null;
+}
+
+function cleanJsonCandidate(value) {
+  return value
+    .trim()
+    .replace(/^\uFEFF/, "")
+    .replace(/,\s*([}\]])/g, "$1");
 }
 
 async function safeFetchJson(url) {
