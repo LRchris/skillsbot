@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Skills Bot POC</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <p class="eyebrow">Job-to-skills proof of concept</p>
+        <h1>Company in, roles and skills out.</h1>
+        <p class="lede">
+          Enter a company name and this POC will look for public job listings, then build role-level and company-level skill snapshots.
+        </p>
+
+        <form id="search-form" class="search-card">
+          <label for="company" class="label">Company</label>
+          <div class="search-row">
+            <input
+              id="company"
+              name="company"
+              type="text"
+              placeholder="Try Notion, OpenAI, Ramp, Vercel, or greenhouse:notion"
+              autocomplete="off"
+              required
+            />
+            <button type="submit">Analyze</button>
+          </div>
+          <label for="demo-password" class="label secondary-label">Demo Password</label>
+          <input
+            id="demo-password"
+            name="demoPassword"
+            type="password"
+            placeholder="Only needed if you protect the deployed demo"
+            autocomplete="current-password"
+          />
+          <p class="hint">
+            Fastest path for the demo: public Greenhouse, Lever, and Ashby job boards. Claude is optional; the app falls back to a rules-based skill pass if no key is set.
+          </p>
+        </form>
+      </section>
+
+      <section id="status" class="status hidden"></section>
+
+      <section id="results" class="results hidden">
+        <div class="summary-grid">
+          <article class="panel">
+            <p class="panel-label">Company Skills</p>
+            <div id="company-skills" class="skills-cloud"></div>
+          </article>
+          <article class="panel">
+            <p class="panel-label">Source Coverage</p>
+            <div id="sources" class="sources"></div>
+            <div id="notes" class="notes"></div>
+          </article>
+        </div>
+
+        <article class="panel">
+          <div class="panel-header">
+            <p class="panel-label">Roles</p>
+            <p id="role-count" class="muted"></p>
+          </div>
+          <div id="roles" class="roles"></div>
+        </article>
+      </section>
+    </main>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+  </html>

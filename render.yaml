@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: skills-bot-poc
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL
+        value: claude-sonnet-4-6
+      - key: DEMO_PASSWORD
+        sync: false
