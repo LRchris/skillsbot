@@ -39,7 +39,7 @@ form.addEventListener("submit", async (event) => {
       body: JSON.stringify({ company })
     });
 
-    const payload = await response.json();
+    const payload = await readJsonResponse(response);
 
     if (!response.ok) {
       throw new Error(payload.error || "The lookup failed.");
@@ -57,6 +57,22 @@ form.addEventListener("submit", async (event) => {
     setStatus(error.message, true);
   }
 });
+
+async function readJsonResponse(response) {
+  const raw = await response.text();
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+    if (raw.trim().startsWith("<")) {
+      throw new Error(
+        "The server returned an HTML error page instead of app data. This usually means the service was restarting or the deployment hit a platform error. Refresh and try again in a few seconds."
+      );
+    }
+
+    throw new Error("The server returned a response the app could not read.");
+  }
+}
 
 function renderResults(payload) {
   companySkillsEl.innerHTML = payload.companySkills
