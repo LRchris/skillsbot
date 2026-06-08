@@ -134,6 +134,17 @@ button:hover {
   filter: brightness(1.04);
 }
 
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: none;
+}
+
+.secondary-button {
+  background: rgba(30, 26, 23, 0.08);
+  color: var(--text);
+}
+
 .hint,
 .muted,
 .notes,
@@ -164,6 +175,13 @@ button:hover {
 
 .panel {
   padding: 22px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
 }
 
 .panel-header {
@@ -218,6 +236,46 @@ button:hover {
   display: grid;
   gap: 14px;
   margin-top: 18px;
+}
+
+.role-picker {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.picker-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  align-items: start;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: var(--panel-strong);
+  border: 1px solid rgba(30, 26, 23, 0.08);
+}
+
+.picker-card input {
+  width: 18px;
+  height: 18px;
+  margin-top: 3px;
+}
+
+.picker-title,
+.picker-meta {
+  margin: 0;
+}
+
+.picker-title {
+  font-family: "IBM Plex Sans", "Avenir Next", sans-serif;
+  font-weight: 600;
+}
+
+.picker-meta {
+  margin-top: 4px;
+  color: var(--muted);
+  font-family: "IBM Plex Sans", "Avenir Next", sans-serif;
+  font-size: 0.92rem;
 }
 
 .role-facet + .role-facet {

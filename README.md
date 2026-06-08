@@ -4,7 +4,8 @@ Ultra-light proof of concept for:
 
 - entering a company name
 - pulling public job listings from Greenhouse, Lever, and Ashby when possible
-- extracting role-level and company-level skills
+- selecting which roles to analyze
+- running separate role analysis passes for skills, tasks, and decisions
 - optionally using Claude through the Anthropic Messages API
 
 ## Why this version
@@ -32,6 +33,13 @@ npm start
 ```
 
 4. Open `http://localhost:3000`
+
+## How it works
+
+1. Enter a company name to fetch roles only.
+2. Select the roles you care about.
+3. Run `skills`, `tasks`, and `decisions` analysis separately.
+4. Review the summary maps and the job-to-job network graph.
 
 ## Input tips
 

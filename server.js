@@ -103,8 +103,12 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
 
+    if (req.method === "POST" && url.pathname === "/api/lookup") {
+      return handleLookup(req, res);
+    }
+
     if (req.method === "POST" && url.pathname === "/api/analyze") {
-      return handleAnalyze(req, res);
+      return handleFacetAnalysis(req, res);
     }
 
     if (req.method === "GET" && url.pathname === "/healthz") {
@@ -131,7 +135,7 @@ if (isMainModule) {
   });
 }
 
-async function handleAnalyze(req, res) {
+async function handleLookup(req, res) {
   if (demoPassword) {
     const providedPassword = req.headers["x-demo-password"];
     if (providedPassword !== demoPassword) {
@@ -168,8 +172,6 @@ async function handleAnalyze(req, res) {
     });
   }
 
-  const enrichment = await extractSkills(companyInput, jobs);
-
   sendJson(res, 200, {
     company: companyInput,
     generatedAt: new Date().toISOString(),
@@ -179,26 +181,61 @@ async function handleAnalyze(req, res) {
       location: job.location,
       department: job.department,
       team: job.team,
-      skills: enrichment.roles[job.id]?.skills || [],
-      tasks: enrichment.roles[job.id]?.tasks || [],
-      decisions: enrichment.roles[job.id]?.decisions || [],
       provider: job.provider,
       sourceLabel: job.sourceLabel,
-      url: job.url
+      url: job.url,
+      description: job.description
     })),
-    companySkills: enrichment.companySkills,
-    companyTasks: enrichment.companyTasks,
-    companyDecisions: enrichment.companyDecisions,
-    graph: enrichment.graph,
     sources: successful.map((result) => ({
       provider: result.provider,
       slug: result.slug,
       count: result.jobs.length
     })),
-    notes: enrichment.notes,
+    meta: {
+      foundJobs: jobs.length,
+      maxJobsToAnalyze,
+      claudeBatchSize
+    }
+  });
+}
+
+async function handleFacetAnalysis(req, res) {
+  if (demoPassword) {
+    const providedPassword = req.headers["x-demo-password"];
+    if (providedPassword !== demoPassword) {
+      return sendJson(res, 401, {
+        error: "This demo is password protected. Enter the demo password and try again."
+      });
+    }
+  }
+
+  const body = await readJsonBody(req);
+  const company = typeof body?.company === "string" ? body.company.trim() : "";
+  const facet = normalizeFacet(body?.facet);
+  const jobs = Array.isArray(body?.jobs) ? sanitizeJobs(body.jobs) : [];
+
+  if (!company) {
+    return sendJson(res, 400, { error: "Company is required." });
+  }
+
+  if (!facet) {
+    return sendJson(res, 400, { error: "Facet must be one of skills, tasks, or decisions." });
+  }
+
+  if (jobs.length === 0) {
+    return sendJson(res, 400, { error: "Select at least one role to analyze." });
+  }
+
+  const analysis = await extractFacet(company, jobs, facet);
+
+  sendJson(res, 200, {
+    company,
+    facet,
+    roles: analysis.roles,
+    companyItems: analysis.companyItems,
+    notes: analysis.notes,
     meta: {
       analyzedJobs: jobs.length,
-      maxJobsToAnalyze,
       claudeBatchSize,
       jobDescriptionCharLimit
     }
@@ -408,28 +445,29 @@ function dedupeJobs(jobs) {
   });
 }
 
-async function extractSkills(company, jobs) {
+async function extractFacet(company, jobs, facet) {
   if (anthropicKey) {
     try {
-      return await extractCapabilitiesWithClaude(company, jobs);
+      return await extractFacetWithClaude(company, jobs, facet);
     } catch (error) {
       console.error("Claude extraction failed, using fallback:", error.message);
     }
   }
 
-  return extractCapabilitiesWithHeuristics(
+  return extractFacetWithHeuristics(
     jobs,
+    facet,
     anthropicKey ? "Claude failed; heuristic fallback used." : "No Anthropic key found; heuristic fallback used."
   );
 }
 
-async function extractCapabilitiesWithClaude(company, jobs) {
+async function extractFacetWithClaude(company, jobs, facet) {
   const candidateModels = await buildAnthropicModelCandidates();
   const errors = [];
 
   for (const model of candidateModels) {
     try {
-      return await requestClaudeCapabilities(company, jobs, model);
+      return await requestClaudeFacet(company, jobs, facet, model);
     } catch (error) {
       errors.push(`${model}: ${error.message}`);
     }
@@ -438,7 +476,7 @@ async function extractCapabilitiesWithClaude(company, jobs) {
   throw new Error(errors.join(" | "));
 }
 
-async function requestClaudeCapabilities(company, jobs, model) {
+async function requestClaudeFacet(company, jobs, facet, model) {
   const batches = chunkArray(jobs, claudeBatchSize);
   const roleMap = {};
   let claudeBatchCount = 0;
@@ -446,11 +484,11 @@ async function requestClaudeCapabilities(company, jobs, model) {
 
   for (const batch of batches) {
     try {
-      const batchResult = await requestClaudeCapabilitiesForBatch(company, batch, model);
+      const batchResult = await requestClaudeFacetForBatch(company, batch, facet, model);
       Object.assign(roleMap, batchResult.roles);
       claudeBatchCount += 1;
     } catch (error) {
-      const fallback = extractCapabilitiesWithHeuristics(batch, "");
+      const fallback = extractFacetWithHeuristics(batch, facet, "");
       Object.assign(roleMap, fallback.roles);
       heuristicBatchCount += 1;
       console.error(`Claude batch fallback for ${model}:`, error.message);
@@ -463,12 +501,9 @@ async function requestClaudeCapabilities(company, jobs, model) {
 
   return {
     roles: roleMap,
-    companySkills: buildFacetCountsFromRoles(roleMap, "skills", maxCompanySkills),
-    companyTasks: buildFacetCountsFromRoles(roleMap, "tasks", maxCompanyTasks),
-    companyDecisions: buildFacetCountsFromRoles(roleMap, "decisions", maxCompanyDecisions),
-    graph: buildCapabilityGraph(jobs, roleMap),
+    companyItems: buildFacetCountsFromRoles(roleMap, facet, getMaxCompanyItems(facet)),
     notes: [
-      `Claude extraction enabled with ${model}.`,
+      `${capitalizeFacet(facet)} analysis enabled with ${model}.`,
       `Analyzed ${jobs.length} roles in ${batches.length} batches.`,
       heuristicBatchCount > 0
         ? `${heuristicBatchCount} batch${heuristicBatchCount === 1 ? "" : "es"} used heuristic fallback.`
@@ -477,19 +512,19 @@ async function requestClaudeCapabilities(company, jobs, model) {
   };
 }
 
-async function requestClaudeCapabilitiesForBatch(company, jobs, model) {
+async function requestClaudeFacetForBatch(company, jobs, facet, model) {
+  const facetPrompt = getFacetPrompt(facet);
   const text = await sendAnthropicMessage({
     model,
-    max_tokens: 2600,
+    max_tokens: 2000,
     temperature: 0.2,
     system:
-      "You analyze job descriptions and return JSON only. For each role, extract concise skills, tasks, and decisions. Skills should be tools, technologies, methods, and knowledge areas. Tasks should be recurring responsibilities phrased as short action statements. Decisions should be the kinds of judgments, tradeoffs, approvals, prioritization calls, or problem-solving decisions the role is expected to make.",
+      `You analyze job descriptions and return JSON only. Extract only ${facet}. ${facetPrompt.system}`,
     messages: [
       {
         role: "user",
         content: JSON.stringify({
-          task:
-            "For each role, extract 6 to 12 skills, 4 to 8 tasks, and 3 to 6 decisions from the full description. Return strict JSON only.",
+          task: facetPrompt.task,
           company,
           jobs: jobs.map((job) => ({
             id: job.id,
@@ -501,9 +536,7 @@ async function requestClaudeCapabilitiesForBatch(company, jobs, model) {
             roles: [
               {
                 id: "job-id",
-                skills: ["TypeScript", "React"],
-                tasks: ["Build internal tools", "Collaborate with stakeholders"],
-                decisions: ["Prioritize roadmap tradeoffs", "Choose implementation approach"]
+                items: [facetPrompt.example]
               }
             ]
           }
@@ -527,11 +560,7 @@ async function requestClaudeCapabilitiesForBatch(company, jobs, model) {
         .filter((role) => role?.id)
         .map((role) => [
           role.id,
-          {
-            skills: uniqueSkills(role.skills || []),
-            tasks: uniqueTasks(role.tasks || []),
-            decisions: uniqueDecisions(role.decisions || [])
-          }
+          normalizeFacetItems(facet, role.items || role[facet] || [])
         ])
     )
   };
@@ -574,9 +603,7 @@ async function repairClaudeJsonResponse(model, rawText, jobs) {
               roles: [
                 {
                   id: "job-id",
-                  skills: ["TypeScript", "React"],
-                  tasks: ["Build internal tools"],
-                  decisions: ["Prioritize roadmap tradeoffs"]
+                  items: ["Example item"]
                 }
               ]
             },
@@ -613,23 +640,16 @@ async function buildAnthropicModelCandidates() {
   ];
 }
 
-function extractCapabilitiesWithHeuristics(jobs, note) {
+function extractFacetWithHeuristics(jobs, facet, note) {
   const roles = {};
 
   for (const job of jobs) {
-    roles[job.id] = {
-      skills: findSkills(job.description),
-      tasks: findTasks(job.description),
-      decisions: findDecisions(job.description)
-    };
+    roles[job.id] = findFacetHeuristically(facet, job.description);
   }
 
   return {
     roles,
-    companySkills: buildFacetCountsFromRoles(roles, "skills", maxCompanySkills),
-    companyTasks: buildFacetCountsFromRoles(roles, "tasks", maxCompanyTasks),
-    companyDecisions: buildFacetCountsFromRoles(roles, "decisions", maxCompanyDecisions),
-    graph: buildCapabilityGraph(jobs, roles),
+    companyItems: buildFacetCountsFromRoles(roles, facet, getMaxCompanyItems(facet)),
     notes: note ? [note] : []
   };
 }
@@ -819,8 +839,8 @@ function isExpectedClaudeShape(value) {
 function buildFacetCountsFromRoles(roles, facet, maxItems) {
   const companyCount = new Map();
 
-  for (const role of Object.values(roles)) {
-    for (const item of role?.[facet] || []) {
+  for (const items of Object.values(roles)) {
+    for (const item of items || []) {
       companyCount.set(item, (companyCount.get(item) || 0) + 1);
     }
   }
@@ -853,6 +873,89 @@ function chunkArray(values, size) {
 function getPositiveInt(value, fallback) {
   const parsed = Number.parseInt(value ?? "", 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function normalizeFacet(value) {
+  return ["skills", "tasks", "decisions"].includes(value) ? value : "";
+}
+
+function sanitizeJobs(jobs) {
+  return jobs
+    .filter((job) => job && typeof job === "object")
+    .map((job) => ({
+      id: String(job.id || ""),
+      title: String(job.title || ""),
+      location: String(job.location || ""),
+      department: String(job.department || ""),
+      team: String(job.team || ""),
+      description: String(job.description || ""),
+      provider: String(job.provider || ""),
+      sourceLabel: String(job.sourceLabel || ""),
+      url: String(job.url || "")
+    }))
+    .filter((job) => job.id && job.title);
+}
+
+function getFacetPrompt(facet) {
+  if (facet === "skills") {
+    return {
+      system: "Skills should be tools, technologies, methods, and knowledge areas.",
+      task:
+        "For each role, extract 6 to 12 concise skills from the full description. Focus on tools, technologies, methods, and functional competencies. Return strict JSON only.",
+      example: "TypeScript"
+    };
+  }
+
+  if (facet === "tasks") {
+    return {
+      system: "Tasks should be recurring responsibilities phrased as short action statements.",
+      task:
+        "For each role, extract 4 to 8 recurring tasks from the full description. Phrase each as a short action statement. Return strict JSON only.",
+      example: "Build internal tools"
+    };
+  }
+
+  return {
+    system:
+      "Decisions should be the kinds of judgments, tradeoffs, approvals, prioritization calls, or problem-solving decisions the role is expected to make.",
+    task:
+      "For each role, extract 3 to 6 decisions from the full description. These should represent judgments, tradeoffs, or choices the role is expected to make. Return strict JSON only.",
+    example: "Prioritize roadmap tradeoffs"
+  };
+}
+
+function normalizeFacetItems(facet, items) {
+  if (facet === "skills") {
+    return uniqueSkills(items);
+  }
+  if (facet === "tasks") {
+    return uniqueTasks(items);
+  }
+  return uniqueDecisions(items);
+}
+
+function getMaxCompanyItems(facet) {
+  if (facet === "skills") {
+    return maxCompanySkills;
+  }
+  if (facet === "tasks") {
+    return maxCompanyTasks;
+  }
+  return maxCompanyDecisions;
+}
+
+function capitalizeFacet(facet) {
+  return facet.charAt(0).toUpperCase() + facet.slice(1);
+}
+
+function findFacetHeuristically(facet, text) {
+  if (facet === "skills") {
+    return findSkills(text);
+  }
+  if (facet === "tasks") {
+    return findTasks(text);
+  }
+  return findDecisions(text);
 }
 
 function findTasks(text) {
@@ -1027,7 +1130,7 @@ async function loadEnvFile() {
 
 export {
   buildTargets,
-  extractCapabilitiesWithHeuristics,
+  extractFacetWithHeuristics,
   fetchAshbyJobs,
   fetchGreenhouseJobs,
   fetchLeverJobs,
