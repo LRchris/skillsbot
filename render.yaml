@@ -14,3 +14,21 @@ services:
         value: claude-sonnet-4-6
       - key: DEMO_PASSWORD
         sync: false
+      - key: MAX_JOBS_TO_ANALYZE
+        value: "40"
+      - key: CLAUDE_BATCH_SIZE
+        value: "8"
+      - key: JOB_DESCRIPTION_CHAR_LIMIT
+        value: "12000"
+      - key: MAX_COMPANY_SKILLS
+        value: "30"
+      - key: MAX_SKILLS_PER_ROLE
+        value: "12"
+      - key: MAX_COMPANY_TASKS
+        value: "24"
+      - key: MAX_TASKS_PER_ROLE
+        value: "8"
+      - key: MAX_COMPANY_DECISIONS
+        value: "20"
+      - key: MAX_DECISIONS_PER_ROLE
+        value: "6"

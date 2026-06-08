@@ -68,9 +68,32 @@ Recommended demo environment variables on Render:
 ANTHROPIC_API_KEY=your_real_key
 ANTHROPIC_MODEL=claude-sonnet-4-6
 DEMO_PASSWORD=pick_a_simple_password
+MAX_JOBS_TO_ANALYZE=40
+CLAUDE_BATCH_SIZE=8
+JOB_DESCRIPTION_CHAR_LIMIT=12000
+MAX_COMPANY_SKILLS=30
+MAX_SKILLS_PER_ROLE=12
+MAX_COMPANY_TASKS=24
+MAX_TASKS_PER_ROLE=8
+MAX_COMPANY_DECISIONS=20
+MAX_DECISIONS_PER_ROLE=6
 ```
 
 If `DEMO_PASSWORD` is set, the deployed app requires that password for analysis requests.
+
+## MVP tuning knobs
+
+The extraction pipeline is configurable so you can trade off coverage, latency, and Claude cost.
+
+- `MAX_JOBS_TO_ANALYZE`: total distinct roles returned and analyzed per search
+- `CLAUDE_BATCH_SIZE`: number of roles sent to Claude per batch
+- `JOB_DESCRIPTION_CHAR_LIMIT`: how much of each job description Claude reads
+- `MAX_COMPANY_SKILLS`: maximum number of company-level skills returned
+- `MAX_SKILLS_PER_ROLE`: maximum number of skills stored per role
+- `MAX_COMPANY_TASKS`: maximum number of company-level tasks returned
+- `MAX_TASKS_PER_ROLE`: maximum number of tasks stored per role
+- `MAX_COMPANY_DECISIONS`: maximum number of company-level decisions returned
+- `MAX_DECISIONS_PER_ROLE`: maximum number of decisions stored per role
 
 Render quick setup:
 

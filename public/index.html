@@ -9,10 +9,10 @@
   <body>
     <main class="shell">
       <section class="hero">
-        <p class="eyebrow">Job-to-skills proof of concept</p>
-        <h1>Company in, roles and skills out.</h1>
+        <p class="eyebrow">Role intelligence map</p>
+        <h1>Company in, skills, tasks, and decisions out.</h1>
         <p class="lede">
-          Enter a company name and this POC will look for public job listings, then build role-level and company-level skill snapshots.
+          Enter a company name and this app will look for public job listings, then build role-level and company-level maps for skills, recurring work, and decision-making expectations.
         </p>
 
         <form id="search-form" class="search-card">
@@ -48,11 +48,28 @@
             <div id="company-skills" class="skills-cloud"></div>
           </article>
           <article class="panel">
+            <p class="panel-label">Company Tasks</p>
+            <div id="company-tasks" class="skills-cloud"></div>
+          </article>
+          <article class="panel">
+            <p class="panel-label">Company Decisions</p>
+            <div id="company-decisions" class="skills-cloud"></div>
+          </article>
+          <article class="panel">
             <p class="panel-label">Source Coverage</p>
             <div id="sources" class="sources"></div>
             <div id="notes" class="notes"></div>
           </article>
         </div>
+
+        <article class="panel">
+          <div class="panel-header">
+            <p class="panel-label">Capability Graph</p>
+            <p class="muted">Roles connected to shared skills, tasks, and decisions</p>
+          </div>
+          <div id="graph-legend" class="graph-legend"></div>
+          <div id="graph" class="graph-wrap"></div>
+        </article>
 
         <article class="panel">
           <div class="panel-header">
