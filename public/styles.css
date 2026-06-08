@@ -310,33 +310,26 @@ button:hover {
   display: inline-block;
 }
 
-.dot-role,
 .node-role {
   background: var(--role);
   fill: var(--role);
 }
 
-.dot-skills,
-.node-skills {
+.dot-skills {
   background: var(--accent);
-  fill: var(--accent);
 }
 
-.dot-tasks,
-.node-tasks {
+.dot-tasks {
   background: #5c8a61;
-  fill: #5c8a61;
 }
 
-.dot-decisions,
-.node-decisions {
+.dot-decisions {
   background: #9a6c3b;
-  fill: #9a6c3b;
 }
 
 .graph-edge {
   stroke-width: 1.4;
-  opacity: 0.38;
+  opacity: 0.44;
 }
 
 .edge-skills {
@@ -352,7 +345,8 @@ button:hover {
 }
 
 .graph-label,
-.graph-heading {
+.graph-heading,
+.graph-subheading {
   font-family: "IBM Plex Sans", "Avenir Next", sans-serif;
   fill: var(--text);
 }
@@ -365,6 +359,11 @@ button:hover {
   font-size: 12px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+  fill: var(--muted);
+}
+
+.graph-subheading {
+  font-size: 12px;
   fill: var(--muted);
 }
 

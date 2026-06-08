@@ -940,40 +940,34 @@ function normalizePhrase(value) {
 }
 
 function buildCapabilityGraph(jobs, roles) {
-  const nodes = [];
+  const nodes = jobs.map((job) => ({
+    id: job.id,
+    label: job.title,
+    group: "role",
+    location: job.location,
+    department: job.department
+  }));
   const edges = [];
-  const nodeIds = new Set();
-  const roleLookup = new Map(jobs.map((job) => [job.id, job]));
-  const topFacets = {
-    skills: new Set(buildFacetCountsFromRoles(roles, "skills", 10).map((item) => item.label)),
-    tasks: new Set(buildFacetCountsFromRoles(roles, "tasks", 8).map((item) => item.label)),
-    decisions: new Set(buildFacetCountsFromRoles(roles, "decisions", 8).map((item) => item.label))
-  };
 
-  for (const [roleId, roleData] of Object.entries(roles)) {
-    const job = roleLookup.get(roleId);
-    addNode(nodes, nodeIds, {
-      id: roleId,
-      label: job?.title || roleId,
-      group: "role"
-    });
+  for (let leftIndex = 0; leftIndex < jobs.length; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < jobs.length; rightIndex += 1) {
+      const leftJob = jobs[leftIndex];
+      const rightJob = jobs[rightIndex];
+      const leftRole = roles[leftJob.id] || {};
+      const rightRole = roles[rightJob.id] || {};
 
-    for (const facet of ["skills", "tasks", "decisions"]) {
-      for (const item of roleData[facet] || []) {
-        if (!topFacets[facet].has(item)) {
+      for (const facet of ["skills", "tasks", "decisions"]) {
+        const shared = intersectLabels(leftRole[facet] || [], rightRole[facet] || []);
+        if (shared.length === 0) {
           continue;
         }
 
-        const itemNodeId = `${facet}:${item}`;
-        addNode(nodes, nodeIds, {
-          id: itemNodeId,
-          label: item,
-          group: facet
-        });
         edges.push({
-          source: roleId,
-          target: itemNodeId,
-          group: facet
+          source: leftJob.id,
+          target: rightJob.id,
+          group: facet,
+          weight: shared.length,
+          shared
         });
       }
     }
@@ -982,13 +976,9 @@ function buildCapabilityGraph(jobs, roles) {
   return { nodes, edges };
 }
 
-function addNode(nodes, nodeIds, node) {
-  if (nodeIds.has(node.id)) {
-    return;
-  }
-
-  nodeIds.add(node.id);
-  nodes.push(node);
+function intersectLabels(left, right) {
+  const rightSet = new Set(right);
+  return [...new Set(left.filter((item) => rightSet.has(item)))];
 }
 
 async function readJsonBody(req) {

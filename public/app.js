@@ -155,20 +155,20 @@ function renderRoleFacet(label, items, facet) {
 
 function renderGraph(graph) {
   const width = 960;
-  const roleNodes = (graph.nodes || []).filter((node) => node.group === "role");
-  const skillNodes = (graph.nodes || []).filter((node) => node.group === "skills");
-  const taskNodes = (graph.nodes || []).filter((node) => node.group === "tasks");
-  const decisionNodes = (graph.nodes || []).filter((node) => node.group === "decisions");
-  const rows = Math.max(roleNodes.length, skillNodes.length, taskNodes.length, decisionNodes.length, 1);
-  const height = 120 + rows * 46;
+  const nodes = graph.nodes || [];
+  const edges = graph.edges || [];
+
+  if (nodes.length === 0) {
+    graphLegendEl.innerHTML = "";
+    graphEl.innerHTML = '<div class="muted">No graph data available yet.</div>';
+    return;
+  }
+
+  const height = 760;
   const positions = new Map();
+  layoutRoleNetwork(nodes, width, height, positions);
 
-  layoutColumn(roleNodes, 120, height, positions);
-  layoutColumn(skillNodes, 370, height, positions);
-  layoutColumn(taskNodes, 610, height, positions);
-  layoutColumn(decisionNodes, 840, height, positions);
-
-  const edges = (graph.edges || [])
+  const edgeMarkup = edges
     .map((edge) => {
       const from = positions.get(edge.source);
       const to = positions.get(edge.target);
@@ -176,29 +176,44 @@ function renderGraph(graph) {
         return "";
       }
 
-      return `<line x1="${from.x}" y1="${from.y}" x2="${to.x}" y2="${to.y}" class="graph-edge edge-${edge.group}" />`;
+      return `
+        <g>
+          <title>${escapeHtml(
+            `${edge.group}: ${edge.shared.join(", ")}`
+          )}</title>
+          <line
+            x1="${from.x}"
+            y1="${from.y}"
+            x2="${to.x}"
+            y2="${to.y}"
+            class="graph-edge edge-${edge.group}"
+            style="stroke-width:${1 + Math.min(edge.weight, 4) * 0.7}"
+          />
+        </g>
+      `;
     })
     .join("");
 
-  const nodes = (graph.nodes || [])
+  const nodeMarkup = nodes
     .map((node) => {
       const point = positions.get(node.id);
       if (!point) {
         return "";
       }
 
-      const radius = node.group === "role" ? 8 : 6;
       return `
         <g>
-          <circle cx="${point.x}" cy="${point.y}" r="${radius}" class="graph-node node-${node.group}" />
-          <text x="${point.x + 14}" y="${point.y + 4}" class="graph-label">${escapeHtml(node.label)}</text>
+          <title>${escapeHtml(
+            [node.label, node.department, node.location].filter(Boolean).join(" • ")
+          )}</title>
+          <circle cx="${point.x}" cy="${point.y}" r="9" class="graph-node node-role" />
+          <text x="${point.x + 14}" y="${point.y + 4}" class="graph-label">${escapeHtml(shortenLabel(node.label, 28))}</text>
         </g>
       `;
     })
     .join("");
 
   graphLegendEl.innerHTML = [
-    ["role", "Roles"],
     ["skills", "Skills"],
     ["tasks", "Tasks"],
     ["decisions", "Decisions"]
@@ -211,24 +226,30 @@ function renderGraph(graph) {
 
   graphEl.innerHTML = `
     <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Capability graph">
-      <text x="88" y="34" class="graph-heading">Roles</text>
-      <text x="338" y="34" class="graph-heading">Skills</text>
-      <text x="585" y="34" class="graph-heading">Tasks</text>
-      <text x="800" y="34" class="graph-heading">Decisions</text>
-      ${edges}
-      ${nodes}
+      <text x="38" y="40" class="graph-heading">Jobs network</text>
+      <text x="38" y="62" class="graph-subheading">Each line shows shared skills, tasks, or decisions between roles.</text>
+      ${edgeMarkup}
+      ${nodeMarkup}
     </svg>
   `;
 }
 
-function layoutColumn(nodes, x, height, positions) {
-  const gap = height / (nodes.length + 1);
+function layoutRoleNetwork(nodes, width, height, positions) {
+  const centerX = width / 2;
+  const centerY = height / 2 + 24;
+  const radius = Math.max(180, Math.min(300, 120 + nodes.length * 8));
+
   nodes.forEach((node, index) => {
+    const angle = (Math.PI * 2 * index) / nodes.length - Math.PI / 2;
     positions.set(node.id, {
-      x,
-      y: 48 + gap * (index + 1)
+      x: centerX + radius * Math.cos(angle),
+      y: centerY + radius * Math.sin(angle)
     });
   });
+}
+
+function shortenLabel(value, maxLength) {
+  return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value;
 }
 
 function setStatus(message, isError) {
